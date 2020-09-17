@@ -1,0 +1,58 @@
+name: Backend Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  container-job:
+    runs-on: ubuntu-latest
+
+    # runs all of the steps inside the specified container rather than on the VM host.
+    # Because of this the network configuration changes from host based network to a container network.
+    container:
+      image: node:12
+
+    services:
+      postgres:
+        image: postgres:10.8
+        env:
+          POSTGRES_PASSWORD: postgres
+        # needed because the postgres container does not provide a healthcheck
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run database migrations
+        run: |
+          export NODE_ENV=test
+          export DATABASE_URL=postgresql://postgres:postgres@postgres/postgres
+          npm run migrate
+        working-directory: ./backend
+
+      - name: Seed the database
+        run: |
+          export NODE_ENV=test
+          export DATABASE_URL=postgresql://postgres:postgres@postgres/postgres 
+          npm run seed
+        working-directory: ./backend
+
+      - name: Run the tests
+        run: |
+          export NODE_ENV=test
+          export REDIS_HOST=redis REDIS_PORT=6379
+          export DATABASE_URL=postgresql://postgres:postgres@postgres/postgres
+          npm run lint
+          npm run test
+        working-directory: ./backend
